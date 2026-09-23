@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบคำนวณเลื่อนเงินเดือนครู</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Sarabun',sans-serif}
+  .inp{border:1px solid #cbd5e1;border-radius:.5rem;padding:.35rem .6rem;width:100%;background:#fff}
+  .inp:focus{outline:2px solid #6366f1;border-color:transparent}
+  .cell{border:1px solid transparent;border-radius:.375rem;padding:.2rem .35rem;width:100%;background:transparent}
+  .cell:hover{border-color:#cbd5e1}.cell:focus{outline:2px solid #6366f1;background:#fff}
+  .btn{padding:.45rem .9rem;border-radius:.5rem;font-weight:600;font-size:.875rem;transition:.15s}
+  .tab.active{background:#4f46e5;color:#fff}
+  th{white-space:nowrap}
+  /* Landing */
+  #landing{background:radial-gradient(circle at 20% 20%,#6366f1 0,transparent 40%),radial-gradient(circle at 80% 80%,#14b8a6 0,transparent 40%),#0f172a;transition:opacity .6s,transform .6s}
+  #landing.hide{opacity:0;transform:scale(1.05);pointer-events:none}
+  .blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.35;animation:float 12s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,-40px)}}
+  .rise{opacity:0;animation:rise .8s cubic-bezier(.2,.8,.2,1) forwards}
+  @keyframes rise{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}
+  .lcard{transition:transform .25s,box-shadow .25s,background .25s}
+  .lcard:hover{transform:translateY(-8px) scale(1.03);box-shadow:0 20px 40px -10px rgba(99,102,241,.6);background:rgba(255,255,255,.14)}
+  .lcard:hover .ico{animation:bounce .6s}
+  @keyframes bounce{0%,100%{transform:none}50%{transform:translateY(-8px) rotate(-6deg)}}
+  .shine{background:linear-gradient(90deg,#fff,#a5b4fc,#5eead4,#fff);background-size:300%;-webkit-background-clip:text;color:transparent;animation:shine 6s linear infinite}
+  @keyframes shine{to{background-position:300%}}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+<div class="flex min-h-screen">
+  <!-- Sidebar -->
+  <aside class="w-60 bg-slate-900 text-slate-200 flex-shrink-0 hidden md:flex flex-col">
+    <div class="p-5 border-b border-slate-700">
+      <div class="text-lg font-bold text-white">💰 เลื่อนเงินเดือน</div>
+      <div class="text-xs text-slate-400">ข้าราชการครูและบุคลากรทางการศึกษา</div>
+    </div>
+    <nav class="p-3 space-y-1 flex-1">
+      <button class="tab active w-full text-left px-4 py-2 rounded-lg" data-tab="dash">📊 แดชบอร์ด / คำนวณ</button>
+      <button class="tab w-full text-left px-4 py-2 rounded-lg hover:bg-slate-800" data-tab="settings">⚙️ ตั้งค่าหน่วยงาน</button>
+      <button class="tab w-full text-left px-4 py-2 rounded-lg hover:bg-slate-800" data-tab="base">📑 ตารางฐานคำนวณ</button>
+      <button class="tab w-full text-left px-4 py-2 rounded-lg hover:bg-slate-800" data-tab="export">📤 ส่งออก / สำรองข้อมูล</button>
+    </nav>
+    <div class="p-4 text-xs text-slate-500">บันทึกอัตโนมัติใน LocalStorage</div>
+  </aside>
+
+  <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
+    <header class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div>
+        <h1 class="text-2xl font-bold" id="hdrSchool">-</h1>
+        <p class="text-sm text-slate-500" id="hdrSub">-</p>
+      </div>
+      <div class="flex items-center gap-2 bg-white rounded-xl p-1 shadow-sm">
+        <button class="mode btn" data-mode="สพฐ.">สพฐ.</button>
+        <button class="mode btn" data-mode="อปท.">อปท.</button>
+      </div>
+      <select id="mobileNav" class="inp md:hidden">
+        <option value="dash">แดชบอร์ด</option><option value="settings">ตั้งค่า</option>
+        <option value="base">ตารางฐาน</option><option value="export">ส่งออก</option>
+      </select>
+    </header>
+
+    <!-- DASHBOARD -->
+    <section id="tab-dash" class="space-y-5">
+      <div class="grid md:grid-cols-2 gap-4" id="budgetCards"></div>
+
+      <div class="bg-white rounded-2xl shadow-sm">
+        <div class="flex flex-wrap gap-2 items-center justify-between p-4 border-b">
+          <h2 class="font-bold text-lg">รายชื่อบุคลากร <span id="cnt" class="text-sm text-slate-400"></span></h2>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn bg-indigo-600 text-white hover:bg-indigo-700" onclick="addRow()">+ เพิ่มรายชื่อ</button>
+            <button class="btn bg-slate-200 hover:bg-slate-300" onclick="openPaste()">📋 วางจาก Excel</button>
+            <button class="btn bg-emerald-600 text-white hover:bg-emerald-700" onclick="autoDist(1)">⚡ เกลี่ยอัตโนมัติ กลุ่ม 1</button>
+            <button class="btn bg-teal-600 text-white hover:bg-teal-700" onclick="autoDist(2)">⚡ เกลี่ยอัตโนมัติ กลุ่ม 2</button>
+            <button class="btn bg-red-50 text-red-600 hover:bg-red-100" onclick="clearAll()">ล้างทั้งหมด</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-slate-600">
+              <tr>
+                <th class="p-2">#</th><th class="p-2 text-left min-w-44">ชื่อ-นามสกุล</th><th class="p-2">อันดับ</th>
+                <th class="p-2">กลุ่ม</th><th class="p-2">เงินเดือนปัจจุบัน</th><th class="p-2">คะแนน</th>
+                <th class="p-2">ระดับผล</th><th class="p-2">สถานะ</th><th class="p-2">ร้อยละ</th>
+                <th class="p-2">ฐานคำนวณ</th><th class="p-2">เงินที่ได้เลื่อน</th><th class="p-2">เงินเดือนใหม่</th>
+                <th class="p-2">ค่าตอบแทนพิเศษ</th><th class="p-2"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="p-3 text-xs text-slate-500 border-t">💡 ร้อยละที่เกิน 6% หรือเงินเดือนชนเพดานจะไฮไลต์ทันที • กดเกลี่ยอัตโนมัติแล้ว ผอ. แก้ร้อยละรายคนทับได้อิสระ</div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="hidden">
+      <div class="bg-white rounded-2xl shadow-sm p-6 max-w-3xl grid md:grid-cols-2 gap-4">
+        <label class="md:col-span-2">ชื่อโรงเรียน/หน่วยงาน<input class="inp" data-s="school"></label>
+        <label>สังกัด (บรรทัดใต้ชื่อ)<input class="inp" data-s="agency"></label>
+        <label>อำเภอ/จังหวัด<input class="inp" data-s="province"></label>
+        <label>รอบการประเมิน
+          <select class="inp" data-s="round"><option value="1">รอบที่ 1 (1 เมษายน)</option><option value="2">รอบที่ 2 (1 ตุลาคม)</option></select></label>
+        <label>ปีงบประมาณ / ปี พ.ศ.<input class="inp" data-s="year" type="number"></label>
+        <label>เลขที่คำสั่ง<input class="inp" data-s="orderNo"></label>
+        <label>วันที่ออกคำสั่ง<input class="inp" data-s="orderDate" type="date"></label>
+        <label>ชื่อผู้ลงนาม<input class="inp" data-s="signer"></label>
+        <label>ตำแหน่งผู้ลงนาม<input class="inp" data-s="signerPos"></label>
+        <label>ร้อยละวงเงิน (%)<input class="inp" data-s="budgetPct" type="number" step="0.01"></label>
+        <label>เพดานร้อยละรายบุคคล (%)<input class="inp" data-s="maxPct" type="number" step="0.01"></label>
+        <div class="md:col-span-2 bg-indigo-50 rounded-lg p-3 text-sm">
+          <b>อัตราเริ่มต้นสำหรับการเกลี่ยอัตโนมัติ (น้ำหนักตามระดับผล)</b> — ระบบจะคูณตัวคูณเดียวกันกับทุกระดับเพื่อให้พอดีวงเงิน
+          <div class="grid grid-cols-5 gap-2 mt-2" id="weightBox"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BASE TABLE -->
+    <section id="tab-base" class="hidden">
+      <div class="bg-white rounded-2xl shadow-sm p-5">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-bold text-lg">ตารางฐานในการคำนวณ (ก.ค.ศ.) — แก้ไขได้</h2>
+          <button class="btn bg-slate-200" onclick="resetBase()">คืนค่าเริ่มต้น</button>
+        </div>
+        <p class="text-xs text-amber-700 bg-amber-50 p-2 rounded mb-3">⚠️ โปรดตรวจทานตัวเลขกับหนังสือ ก.ค.ศ. ฉบับล่าสุดก่อนใช้งานจริง</p>
+        <div class="overflow-x-auto"><table class="w-full text-sm" id="baseTbl"></table></div>
+      </div>
+    </section>
+
+    <!-- EXPORT -->
+    <section id="tab-export" class="hidden">
+      <div class="grid md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-2xl shadow-sm p-5">
+          <h3 class="font-bold mb-2">📄 หนังสือแจ้งผล (Word)</h3>
+          <select id="docPerson" class="inp mb-2"></select>
+          <button class="btn bg-indigo-600 text-white w-full mb-2" onclick="exportOne()">ดาวน์โหลดรายบุคคล</button>
+          <button class="btn bg-indigo-100 text-indigo-700 w-full" onclick="exportAllDocx()">ดาวน์โหลดทั้งหมด (ไฟล์เดียว แยกหน้า)</button>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm p-5">
+          <h3 class="font-bold mb-2">📊 บัญชีสรุป (Excel)</h3>
+          <p class="text-sm text-slate-500 mb-3">1 ไฟล์ 2 ชีต แยกตามกลุ่มบริหารวงเงิน</p>
+          <button class="btn bg-emerald-600 text-white w-full" onclick="exportXlsx()">ดาวน์โหลด .xlsx</button>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm p-5">
+          <h3 class="font-bold mb-2">💾 สำรอง / ย้ายเครื่อง (JSON)</h3>
+          <button class="btn bg-slate-800 text-white w-full mb-2" onclick="exportJson()">Export JSON</button>
+          <label class="btn bg-slate-200 w-full block text-center cursor-pointer">Import JSON
+            <input type="file" accept=".json" class="hidden" onchange="importJson(event)"></label>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Paste modal -->
+<div id="pasteModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl p-5 w-full max-w-2xl">
+    <h3 class="font-bold text-lg mb-1">วางข้อมูลจาก Excel</h3>
+    <p class="text-sm text-slate-500 mb-2">ลำดับคอลัมน์: <b>ชื่อ-นามสกุล | อันดับ | เงินเดือน | คะแนน | ระดับผล</b> (คอลัมน์ 4–5 ไม่บังคับ; อันดับพิมพ์ เช่น ครูผู้ช่วย, คศ.1, คศ.3)</p>
+    <textarea id="pasteArea" rows="10" class="inp font-mono text-xs" placeholder="นายสมชาย ใจดี	คศ.2	32000	92	ดีเด่น"></textarea>
+    <div class="flex justify-end gap-2 mt-3">
+      <label class="text-sm flex items-center gap-1 mr-auto"><input type="checkbox" id="pasteReplace"> แทนที่รายชื่อเดิม</label>
+      <button class="btn bg-slate-200" onclick="closePaste()">ยกเลิก</button>
+      <button class="btn bg-indigo-600 text-white" onclick="doPaste()">นำเข้า</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-2 rounded-lg shadow-lg hidden z-50"></div>
+
+<script>
+/* ================== DATA ================== */
+const KEY = 'teacherSalaryApp_v1';
+const RANKS = ['ครูผู้ช่วย','คศ.1','คศ.2','คศ.3','คศ.4','คศ.5'];
+const LEVELS = ['ดีเด่น','ดีมาก','ดี','พอใช้','ปรับปรุง'];
+const DEFAULT_BASE = {
+  'ครูผู้ช่วย':{min:15050,max:24750,lo:[15050,19900,17480],hi:[19910,24750,22330]},
+  'คศ.1':{min:15440,max:34310,lo:[15440,24870,20160],hi:[24880,34310,29600]},
+  'คศ.2':{min:16190,max:41620,lo:[16190,28900,22550],hi:[28910,41620,35270]},
+  'คศ.3':{min:19860,max:58390,lo:[19860,39120,29490],hi:[39130,58390,48760]},
+  'คศ.4':{min:24400,max:69040,lo:[24400,46720,35560],hi:[46730,69040,57890]},
+  'คศ.5':{min:29980,max:76800,lo:[29980,53390,41690],hi:[53400,76800,65100]},
+};
+const DEFAULT_STATE = {
+  mode:'สพฐ.',
+  settings:{school:'โรงเรียนตัวอย่างวิทยา',agency:'',province:'',round:'1',year:new Date().getFullYear()+543,
+    orderNo:'',orderDate:new Date().toISOString().slice(0,10),signer:'',signerPos:'ผู้อำนวยการโรงเรียน',
+    budgetPct:3,maxPct:6,weights:{'ดีเด่น':6,'ดีมาก':4.5,'ดี':3,'พอใช้':1.5,'ปรับปรุง':0}},
+  base:JSON.parse(JSON.stringify(DEFAULT_BASE)),
+  people:[]
+};
+let S;
+try{ S = JSON.parse(localStorage.getItem(KEY)) || null }catch(e){ S=null }
+if(!S) S = JSON.parse(JSON.stringify(DEFAULT_STATE));
+S.settings = Object.assign({}, DEFAULT_STATE.settings, S.settings);
+const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
+const uid = () => Math.random().toString(36).slice(2,10);
+const fmt = n => (Number(n)||0).toLocaleString('th-TH',{maximumFractionDigits:2});
+const toast = m => { const t=document.getElementById('toast'); t.textContent=m; t.classList.remove('hidden'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.add('hidden'),2500); };
+
+/* ================== CALC ================== */
+const groupOf = rank => ['คศ.4','คศ.5'].includes(rank) ? 2 : 1;
+function normRank(s){
+  s=(s||'').toString().replace(/\s/g,'').replace('ค.ศ.','คศ.').replace('คศ','คศ.').replace('..','.');
+  if(/ผู้ช่วย/.test(s)) return 'ครูผู้ช่วย';
+  const m = s.match(/(\d)/); return m && RANKS[+m[1]] ? RANKS[+m[1]] : 'คศ.1';
+}
+function baseFor(p){
+  const b = S.base[p.rank]; if(!b) return 0;
+  return (+p.salary <= b.lo[1]) ? b.lo[2] : b.hi[2];
+}
+function calc(p){
+  const b = S.base[p.rank]||{max:0};
+  const base = baseFor(p);
+  const pct = p.promoted ? (+p.pct||0) : 0;
+  let inc = pct>0 ? Math.ceil(base*pct/100/10)*10 : 0;   // ปัดขึ้นเป็นหลักสิบ
+  const sal = +p.salary||0;
+  let newSal = sal+inc, special = 0;
+  if(newSal > b.max){ special = newSal - Math.max(b.max, sal); newSal = Math.max(b.max, sal); }
+  return {base,pct,inc,newSal,special,over:pct>S.settings.maxPct, capped:special>0};
+}
+function groupStats(g){
+  const ps = S.people.filter(p=>groupOf(p.rank)===g);
+  const total = ps.reduce((a,p)=>a+(+p.salary||0),0);
+  const budget = Math.floor(total*S.settings.budgetPct/100);
+  const used = ps.reduce((a,p)=>a+calc(p).inc,0);
+  return {ps,total,budget,used,left:budget-used};
+}
+
+/* ================== AUTO DISTRIBUTE ================== */
+function autoDist(g){
+  const {ps,budget} = groupStats(g);
+  if(!ps.length) return toast('ไม่มีบุคลากรในกลุ่มนี้');
+  const W = S.settings.weights, cap = S.settings.maxPct;
+  const elig = ps.filter(p=>p.promoted && (+W[p.level]||0)>0);
+  ps.forEach(p=>{ if(!elig.includes(p)) p.pct = 0; });
+  const cost = k => elig.reduce((a,p)=>{
+    const r = Math.min(cap, Math.floor(W[p.level]*k*100)/100);
+    return a + (r>0?Math.ceil(baseFor(p)*r/100/10)*10:0); },0);
+  let lo=0, hi=cap/Math.min(...elig.map(p=>W[p.level]))+1;
+  for(let i=0;i<60;i++){ const m=(lo+hi)/2; cost(m)<=budget?lo=m:hi=m; }
+  elig.forEach(p=> p.pct = Math.min(cap, Math.floor(W[p.level]*lo*100)/100));
+  // เติมเศษที่เหลือทีละ 0.01% ให้คนผลสูงก่อน
+  const order=[...elig].sort((a,b)=>LEVELS.indexOf(a.level)-LEVELS.indexOf(b.level)||(b.score||0)-(a.score||0));
+  let changed=true;
+  while(changed){ changed=false;
+    for(const p of order){
+      if(p.pct>=cap) continue;
+      const old=p.pct; p.pct=+(p.pct+0.01).toFixed(2);
+      if(groupStats(g).used>budget){ p.pct=old; } else changed=true;
+    }
+  }
+  save(); render(); toast(`เกลี่ยกลุ่ม ${g} เรียบร้อย`);
+}
+
+/* ================== RENDER ================== */
+function renderHeader(){
+  const s=S.settings;
+  document.getElementById('hdrSchool').textContent = s.school||'-';
+  document.getElementById('hdrSub').textContent = `โหมด ${S.mode} • รอบที่ ${s.round} (${s.round=='1'?'1 เม.ย.':'1 ต.ค.'} ${s.year}) • วงเงิน ${s.budgetPct}%`;
+  document.querySelectorAll('.mode').forEach(b=>b.className='mode btn '+(b.dataset.mode===S.mode?'bg-indigo-600 text-white':'text-slate-600'));
+}
+function renderBudget(){
+  const names={1:'กลุ่มที่ 1 : ครูผู้ช่วย – คศ.3',2:'กลุ่มที่ 2 : คศ.4 – คศ.5'};
+  document.getElementById('budgetCards').innerHTML=[1,2].map(g=>{
+    const st=groupStats(g), pc=st.budget?Math.min(100,st.used/st.budget*100):0, neg=st.left<0;
+    return `<div class="bg-white rounded-2xl shadow-sm p-5 border-l-4 ${neg?'border-red-500':'border-indigo-500'}">
+      <div class="flex justify-between items-start"><div><div class="font-bold">${names[g]}</div>
+      <div class="text-xs text-slate-500">${st.ps.length} คน • เงินเดือนรวม ${fmt(st.total)} บาท</div></div>
+      <span class="text-xs px-2 py-1 rounded-full ${neg?'bg-red-100 text-red-700':st.left<50?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">
+      ${neg?'เกินวงเงิน!':st.left<50?'ใช้เต็มวงเงิน':'ยังเหลือวงเงิน'}</span></div>
+      <div class="grid grid-cols-3 gap-2 my-3 text-center">
+        <div><div class="text-xs text-slate-500">วงเงิน ${S.settings.budgetPct}%</div><div class="font-bold text-lg">${fmt(st.budget)}</div></div>
+        <div><div class="text-xs text-slate-500">ใช้ไป</div><div class="font-bold text-lg text-indigo-600">${fmt(st.used)}</div></div>
+        <div><div class="text-xs text-slate-500">คงเหลือ</div><div class="font-bold text-lg ${neg?'text-red-600':'text-emerald-600'}">${fmt(st.left)}</div></div>
+      </div>
+      <div class="h-3 bg-slate-100 rounded-full overflow-hidden"><div class="h-full ${neg?'bg-red-500':'bg-indigo-500'} transition-all" style="width:${neg?100:pc}%"></div></div>
+      <div class="text-right text-xs text-slate-500 mt-1">${st.budget?(st.used/st.budget*100).toFixed(2):0}%</div></div>`;
+  }).join('');
+}
+function renderTable(){
+  const tb=document.getElementById('tbody');
+  document.getElementById('cnt').textContent=`(${S.people.length} คน)`;
+  if(!S.people.length){ tb.innerHTML='<tr><td colspan="14" class="p-8 text-center text-slate-400">ยังไม่มีรายชื่อ — กด “เพิ่มรายชื่อ” หรือ “วางจาก Excel”</td></tr>'; return; }
+  const sorted=[...S.people].sort((a,b)=>groupOf(a.rank)-groupOf(b.rank));
+  tb.innerHTML=sorted.map((p,i)=>{
+    const c=calc(p), g=groupOf(p.rank);
+    return `<tr class="border-t hover:bg-slate-50 ${!p.promoted?'bg-slate-50 text-slate-400':''}" data-id="${p.id}">
+      <td class="p-1 text-center">${i+1}</td>
+      <td class="p-1"><input class="cell" data-f="name" value="${esc(p.name)}"></td>
+      <td class="p-1"><select class="cell" data-f="rank">${RANKS.map(r=>`<option ${r===p.rank?'selected':''}>${r}</option>`).join('')}</select></td>
+      <td class="p-1 text-center"><span class="px-2 py-0.5 rounded-full text-xs ${g==1?'bg-indigo-100 text-indigo-700':'bg-teal-100 text-teal-700'}">${g}</span></td>
+      <td class="p-1"><input class="cell text-right w-24" type="number" data-f="salary" value="${p.salary}"></td>
+      <td class="p-1"><input class="cell text-right w-16" type="number" step="0.01" data-f="score" value="${p.score??''}"></td>
+      <td class="p-1"><select class="cell" data-f="level">${LEVELS.map(l=>`<option ${l===p.level?'selected':''}>${l}</option>`).join('')}</select></td>
+      <td class="p-1"><select class="cell" data-f="promoted"><option value="1" ${p.promoted?'selected':''}>ได้เลื่อน</option><option value="0" ${!p.promoted?'selected':''}>ไม่ได้เลื่อน</option></select>
+        ${!p.promoted?`<input class="cell text-xs mt-1" placeholder="ระบุเหตุผล" data-f="reason" value="${esc(p.reason||'')}">`:''}</td>
+      <td class="p-1"><input class="cell text-right w-20 font-semibold ${c.over?'bg-red-100 text-red-700':''}" type="number" step="0.01" data-f="pct" value="${p.pct||0}" ${!p.promoted?'disabled':''}>
+        ${c.over?'<div class="text-[10px] text-red-600">เกิน '+S.settings.maxPct+'%</div>':''}</td>
+      <td class="p-1 text-right">${fmt(c.base)}</td>
+      <td class="p-1 text-right font-semibold text-indigo-700">${fmt(c.inc)}</td>
+      <td class="p-1 text-right">${fmt(c.newSal)}${c.capped?'<div class="text-[10px] text-amber-600">ชนขั้นสูง</div>':''}</td>
+      <td class="p-1 text-right ${c.special?'text-amber-600 font-semibold':''}">${c.special?fmt(c.special):'-'}</td>
+      <td class="p-1"><button class="text-red-500 hover:bg-red-50 rounded px-2" onclick="delRow('${p.id}')">✕</button></td></tr>`;
+  }).join('');
+}
+const esc=s=>(s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function renderSettings(){
+  document.querySelectorAll('[data-s]').forEach(el=>el.value=S.settings[el.dataset.s]??'');
+  document.getElementById('weightBox').innerHTML=LEVELS.map(l=>`<label class="text-xs">${l}<input class="inp" type="number" step="0.1" data-w="${l}" value="${S.settings.weights[l]}"></label>`).join('');
+}
+function renderBase(){
+  document.getElementById('baseTbl').innerHTML=`<thead class="bg-slate-50"><tr><th class="p-2">อันดับ</th><th>ขั้นต่ำ</th><th>ขั้นสูง</th>
+    <th class="bg-sky-50">ช่วงล่าง ต่ำ</th><th class="bg-sky-50">ช่วงล่าง สูง</th><th class="bg-sky-100">ฐานช่วงล่าง</th>
+    <th class="bg-violet-50">ช่วงบน ต่ำ</th><th class="bg-violet-50">ช่วงบน สูง</th><th class="bg-violet-100">ฐานช่วงบน</th></tr></thead><tbody>`+
+  RANKS.map(r=>{const b=S.base[r];const inp=(k,i)=>`<td class="p-1"><input class="cell text-right" type="number" data-r="${r}" data-k="${k}" ${i!==undefined?`data-i="${i}"`:''} value="${i!==undefined?b[k][i]:b[k]}"></td>`;
+    return `<tr class="border-t"><td class="p-2 font-semibold">${r}</td>${inp('min')}${inp('max')}${inp('lo',0)}${inp('lo',1)}${inp('lo',2)}${inp('hi',0)}${inp('hi',1)}${inp('hi',2)}</tr>`}).join('')+'</tbody>';
+}
+function renderDocSel(){
+  document.getElementById('docPerson').innerHTML=S.people.map(p=>`<option value="${p.id}">${esc(p.name)} (${p.rank})</option>`).join('');
+}
+function render(){ renderHeader(); renderBudget(); renderTable(); renderDocSel(); }
+
+/* ================== EVENTS ================== */
+document.getElementById('tbody').addEventListener('change',e=>{
+  const tr=e.target.closest('tr'), f=e.target.dataset.f; if(!tr||!f) return;
+  const p=S.people.find(x=>x.id===tr.dataset.id); let v=e.target.value;
+  if(['salary','score','pct'].includes(f)) v=v===''?'':+v;
+  if(f==='promoted') { v=v==='1'; if(!v) p.pct=0; }
+  p[f]=v; save(); render();
+  if(f==='pct' && v>S.settings.maxPct) toast(`⚠️ ร้อยละเกินเพดาน ${S.settings.maxPct}%`);
+});
+document.getElementById('baseTbl').addEventListener('change',e=>{
+  const {r,k,i}=e.target.dataset; if(!r) return;
+  if(i!==undefined) S.base[r][k][+i]=+e.target.value; else S.base[r][k]=+e.target.value;
+  save(); render();
+});
+document.getElementById('tab-settings').addEventListener('input',e=>{
+  if(e.target.dataset.s){ const k=e.target.dataset.s; S.settings[k]=['budgetPct','maxPct'].includes(k)?+e.target.value:e.target.value; }
+  if(e.target.dataset.w) S.settings.weights[e.target.dataset.w]=+e.target.value;
+  save(); render();
+});
+document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{
+  S.mode=b.dataset.mode;
+  if(S.mode==='อปท.' && !S.settings.agency) S.settings.agency='องค์การบริหารส่วนจังหวัด';
+  if(S.mode==='สพฐ.' && !S.settings.agency) S.settings.agency='สำนักงานเขตพื้นที่การศึกษามัธยมศึกษา';
+  save(); render(); renderSettings();
+});
+function showTab(t){
+  ['dash','settings','base','export'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==t));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
+  if(t==='base') renderBase(); if(t==='settings') renderSettings();
+}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+document.getElementById('mobileNav').onchange=e=>showTab(e.target.value);
+
+function addRow(){ S.people.push({id:uid(),name:'',rank:'คศ.1',salary:20000,score:'',level:'ดีมาก',pct:0,promoted:true,reason:''}); save(); render(); }
+function delRow(id){ if(confirm('ลบรายชื่อนี้?')){ S.people=S.people.filter(p=>p.id!==id); save(); render(); } }
+function clearAll(){ if(confirm('ล้างรายชื่อทั้งหมด?')){ S.people=[]; save(); render(); } }
+function resetBase(){ if(confirm('คืนค่าตารางฐานเริ่มต้น?')){ S.base=JSON.parse(JSON.stringify(DEFAULT_BASE)); save(); renderBase(); render(); } }
+const openPaste=()=>{ const m=document.getElementById('pasteModal'); m.classList.remove('hidden'); m.classList.add('flex'); };
+const closePaste=()=>{ const m=document.getElementById('pasteModal'); m.classList.add('hidden'); m.classList.remove('flex'); };
+function doPaste(){
+  const rows=document.getElementById('pasteArea').value.trim().split(/\r?\n/).filter(Boolean);
+  const list=rows.map(r=>{ const c=r.split('\t').map(x=>x.trim());
+    const sal=+String(c[2]||'').replace(/[^\d.]/g,'');
+    if(!c[0]||!sal) return null;
+    const lvl=LEVELS.find(l=>(c[4]||'')===l)||LEVELS.find(l=>(c[4]||'').includes(l))||'ดีมาก';
+    return {id:uid(),name:c[0],rank:normRank(c[1]),salary:sal,score:c[3]?+c[3]:'',level:lvl,pct:0,promoted:lvl!=='ปรับปรุง',reason:lvl==='ปรับปรุง'?'ผลการประเมินอยู่ในระดับต้องปรับปรุง':''};
+  }).filter(Boolean);
+  if(document.getElementById('pasteReplace').checked) S.people=list; else S.people.push(...list);
+  save(); render(); closePaste(); toast(`นำเข้า ${list.length} รายการ`);
+}
+
+/* ================== EXPORT: JSON ================== */
+function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+function exportJson(){ download(new Blob([JSON.stringify(S,null,2)],{type:'application/json'}),`salary-backup-${S.settings.year}-r${S.settings.round}.json`); }
+function importJson(e){
+  const f=e.target.files[0]; if(!f) return;
+  f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.people) throw 0; S=d; S.settings=Object.assign({},DEFAULT_STATE.settings,S.settings); save(); render(); renderSettings(); toast('นำเข้าข้อมูลสำเร็จ'); }catch(_){ alert('ไฟล์ไม่ถูกต้อง'); } });
+  e.target.value='';
+}
+
+/* ================== EXPORT: EXCEL ================== */
+function exportXlsx(){
+  const wb=XLSX.utils.book_new();
+  [[1,'กลุ่ม1 ครูผู้ช่วย-คศ.3'],[2,'กลุ่ม2 คศ.4-คศ.5']].forEach(([g,name])=>{
+    const st=groupStats(g);
+    const aoa=[[`บัญชีรายละเอียดการเลื่อนเงินเดือน ${S.settings.school}`],[`รอบที่ ${S.settings.round} ปี ${S.settings.year} — ${name}`],[],
+      ['ที่','ชื่อ-นามสกุล','อันดับ','เงินเดือนเดิม','คะแนน','ระดับผล','ฐานคำนวณ','ร้อยละ','เงินที่ได้เลื่อน','เงินเดือนใหม่','ค่าตอบแทนพิเศษ','หมายเหตุ']];
+    st.ps.forEach((p,i)=>{const c=calc(p); aoa.push([i+1,p.name,p.rank,+p.salary,p.score,p.level,c.base,c.pct,c.inc,c.newSal,c.special,p.promoted?'':('ไม่ได้เลื่อน: '+(p.reason||''))]);});
+    aoa.push([],['','เงินเดือนรวม','',st.total],['','วงเงิน '+S.settings.budgetPct+'%','',st.budget],['','ใช้ไป','',st.used],['','คงเหลือ','',st.left]);
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:5},{wch:28},{wch:10},{wch:12},{wch:8},{wch:10},{wch:10},{wch:8},{wch:12},{wch:12},{wch:14},{wch:30}];
+    XLSX.utils.book_append_sheet(wb,ws,name);
+  });
+  XLSX.writeFile(wb,`บัญชีเลื่อนเงินเดือน-รอบ${S.settings.round}-${S.settings.year}.xlsx`);
+}
+
+/* ================== EXPORT: WORD ================== */
+const FONT='TH SarabunPSK';
+const thaiDate=d=>{ if(!d) return '............'; const m=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']; const x=new Date(d); return `${x.getDate()} ${m[x.getMonth()]} ${x.getFullYear()+543}`; };
+function R(text,o={}){ return new docx.TextRun({text:String(text),font:{ascii:FONT,hAnsi:FONT,cs:FONT,eastAsia:FONT},size:32,sizeComplexScript:32,bold:o.b,boldComplexScript:o.b}); }
+function P(text,o={}){ return new docx.Paragraph({alignment:o.al||docx.AlignmentType.LEFT,indent:o.ind?{firstLine:1440}:undefined,spacing:{after:o.after??0},children:Array.isArray(text)?text:[R(text,o)]}); }
+function personDocChildren(p){
+  const s=S.settings, c=calc(p), A=docx.AlignmentType;
+  const rd = s.round=='1' ? `1 เมษายน ${s.year}` : `1 ตุลาคม ${s.year}`;
+  const cellP=(t,b)=>new docx.TableCell({verticalAlign:docx.VerticalAlign.CENTER,children:[P(t,{al:A.CENTER,b})]});
+  const tbl=new docx.Table({width:{size:100,type:docx.WidthType.PERCENTAGE},rows:[
+    new docx.TableRow({tableHeader:true,children:['เงินเดือนเดิม','ฐานในการคำนวณ','ร้อยละที่ได้เลื่อน','จำนวนเงินที่ได้เลื่อน','เงินเดือนที่ได้รับ'].map(t=>cellP(t,true))}),
+    new docx.TableRow({children:[fmt(p.salary),fmt(c.base),p.promoted?c.pct.toFixed(2):'-',p.promoted?fmt(c.inc):'-',fmt(c.newSal)].map(t=>cellP(t))})
+  ]});
+  const kids=[
+    P('หนังสือแจ้งผลการเลื่อนเงินเดือน',{al:A.CENTER,b:true}),
+    P(`${s.school}`,{al:A.CENTER,b:true}),
+    P(`สังกัด ${s.agency||S.mode}`,{al:A.CENTER,after:200}),
+    P(`เรื่อง  แจ้งผลการเลื่อนเงินเดือนข้าราชการครูและบุคลากรทางการศึกษา รอบที่ ${s.round} (${rd})`),
+    P(`เรียน  ${p.name}`,{after:200}),
+    P(`ตามที่${s.school} ได้ดำเนินการเลื่อนเงินเดือนข้าราชการครูและบุคลากรทางการศึกษา ณ วันที่ ${rd} ตามคำสั่งที่ ${s.orderNo||'......./.......'} ลงวันที่ ${thaiDate(s.orderDate)} นั้น`,{ind:true}),
+    P(`จึงขอแจ้งผลการเลื่อนเงินเดือนของท่าน ตำแหน่ง ${p.rank==='ครูผู้ช่วย'?'ครูผู้ช่วย':'ครู วิทยฐานะ/อันดับ '+p.rank} ผลการประเมินระดับ ${p.level}${p.score!==''&&p.score!=null?' (คะแนน '+p.score+')':''} ดังนี้`,{ind:true,after:120}),
+    tbl, P('',{after:120}),
+  ];
+  if(c.special) kids.push(P(`หมายเหตุ ท่านได้รับเงินเดือนถึงขั้นสูงของอันดับ จึงได้รับค่าตอบแทนพิเศษ จำนวน ${fmt(c.special)} บาท`,{ind:true}));
+  kids.push(P([R('กรณีไม่ได้เลื่อนเงินเดือน  ',{b:true}),R(p.promoted?'( - )':`( / ) ไม่ได้เลื่อน เนื่องจาก ${p.reason||'..................................................'}`)],{after:120}));
+  kids.push(P('จึงเรียนมาเพื่อโปรดทราบ',{ind:true,after:600}));
+  ['(ลงชื่อ).......................................................',`(${s.signer||'.......................................'})`,s.signerPos||'ผู้อำนวยการ',`${thaiDate(s.orderDate)}`]
+    .forEach(t=>kids.push(P(t,{al:A.CENTER})));
+  kids.push(P('',{after:300}));
+  kids.push(P('ข้าพเจ้าได้รับทราบผลการเลื่อนเงินเดือนแล้ว',{ind:true}));
+  kids.push(P('(ลงชื่อ)........................................ผู้รับแจ้ง   วันที่ ............................',{al:A.CENTER}));
+  return kids;
+}
+const docOpts=sections=>new docx.Document({styles:{default:{document:{run:{font:FONT,size:32}}}},sections});
+const sec=p=>({properties:{page:{margin:{top:1440,bottom:1080,left:1700,right:1134}}},children:personDocChildren(p)});
+async function exportOne(){
+  const p=S.people.find(x=>x.id===document.getElementById('docPerson').value); if(!p) return toast('เลือกรายชื่อก่อน');
+  download(await docx.Packer.toBlob(docOpts([sec(p)])),`แจ้งผล_${p.name||'ไม่ระบุ'}.docx`);
+}
+async function exportAllDocx(){
+  if(!S.people.length) return toast('ยังไม่มีรายชื่อ');
+  download(await docx.Packer.toBlob(docOpts(S.people.map(sec))),`แจ้งผลเลื่อนเงินเดือน_ทั้งหมด.docx`);
+}
+
+render(); renderSettings();
+</script>
+</body>
+</html>
