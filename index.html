@@ -240,8 +240,7 @@
         <label class="lbl">รอบการประเมิน
           <select class="inp" data-s="round"><option value="1">รอบที่ 1 (1 เมษายน)</option><option value="2">รอบที่ 2 (1 ตุลาคม)</option></select></label>
         <label class="lbl">ปี พ.ศ.<input class="inp" data-s="year" type="number"></label>
-        <label class="lbl">เลขที่คำสั่ง<input class="inp" data-s="orderNo"></label>
-        <label class="lbl">วันที่ออกคำสั่ง<input class="inp" data-s="orderDate" type="date"></label>
+        <label class="lbl">วันที่แจ้งผล<input class="inp" data-s="orderDate" type="date"></label>
         <label class="lbl">ชื่อผู้ลงนาม<input class="inp" data-s="signer"></label>
         <label class="lbl">ตำแหน่งผู้ลงนาม (ขึ้นบรรทัดใหม่ได้)<textarea class="inp" rows="2" data-s="signerPos"></textarea></label>
         <label class="lbl">ร้อยละวงเงิน (%)<input class="inp" data-s="budgetPct" type="number" step="0.01"></label>
@@ -1047,10 +1046,18 @@ async function loadVisits(){
   const base=`https://api.counterapi.dev/v1/${COUNTER.ns}/${COUNTER.key}`;
   let first=true; try{ first=!sessionStorage.getItem('visited'); sessionStorage.setItem('visited','1'); }catch(e){}
   try{
-    const r=await fetch(first?base+'/up':base); const d=await r.json();
-    if(typeof d.count!=='number') throw 0;
-    document.querySelectorAll('.visit-count').forEach(el=>el.textContent=d.count.toLocaleString('th-TH'));
-  }catch(e){ document.querySelectorAll('.visit-wrap').forEach(el=>el.style.display='none'); }
+    const ctl=new AbortController(); setTimeout(()=>ctl.abort(),5000);
+    const r=await fetch(first?base+'/up':base,{signal:ctl.signal,cache:'no-store'}); if(!r.ok) throw 0;
+    const d=await r.json(); const n=d.count??d.value??d.data?.up_count;
+    if(typeof n!=='number') throw 0;
+    document.querySelectorAll('.visit-count').forEach(el=>el.textContent=n.toLocaleString('th-TH'));
+  }catch(e){ visitBadge(); }
+}
+// สำรอง: ป้ายนับผู้เข้าชมแบบรูปภาพ (hits.sh) — ทำงานได้เสมอบน GitHub Pages ไม่ติด CORS
+function visitBadge(){
+  const id=encodeURIComponent((location.host+location.pathname).replace(/index\.html$/,'').replace(/\/$/,''));
+  const src=`https://hits.sh/${id}.svg?style=flat-square&label=visitors&color=6366f1&labelColor=334155`;
+  document.querySelectorAll('.visit-wrap').forEach(el=>{ el.innerHTML=`👥 ผู้เข้าใช้งาน <img src="${src}" alt="visitors" class="inline h-5 align-middle rounded">`; el.style.display=''; });
 }
 if(location.protocol.startsWith('http')) loadVisits(); else document.querySelectorAll('.visit-wrap').forEach(el=>el.style.display='none');
 
